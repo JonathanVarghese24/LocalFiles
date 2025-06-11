@@ -10,9 +10,7 @@ import AVFoundation
 
 @main
 struct LocalFilesApp: App {
-    init() {
-        configureAudioSession()
-    }
+    init() { configureAudioSession() }
 
     var body: some Scene {
         WindowGroup {
@@ -26,7 +24,7 @@ struct LocalFilesApp: App {
             try session.setCategory(.playback, mode: .default)
             try session.setActive(true)
         } catch {
-            print("⚠️ Failed to configure audio session:", error)
+            print("⚠️ Audio session config failed:", error)
         }
     }
 }
