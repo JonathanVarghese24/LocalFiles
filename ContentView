@@ -9,10 +9,13 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 struct ContentView: View {
-    @StateObject private var audioManager = AudioPlayerManager()
-    @State private var songs: [Song] = []
-    @State private var showImporter = false
-    @State private var selectedSong: Song?
+    @StateObject private var audioManager     = AudioPlayerManager()
+    @StateObject private var playlistsManager = PlaylistsManager()
+    @StateObject private var albumsManager    = AlbumsManager()
+
+    @State private var songs: [Song]        = []
+    @State private var showImporter         = false
+    @State private var selectedSong: Song?  = nil
 
     private var documentsURL: URL {
         FileManager.default
@@ -22,82 +25,83 @@ struct ContentView: View {
 
     var body: some View {
         TabView {
+            // Songs
+            NavigationView { songsList }
+                .tabItem { Label("Songs", systemImage: "music.note.list") }
+
+            // Albums
             NavigationView {
-                VStack {
-                    Button("Import Songs") {
-                        showImporter = true
-                    }
-                    .padding()
-
-                    List(songs) { song in
-                        Button {
-                            selectedSong = song
-                            audioManager.playSong(song)
-                        } label: {
-                            HStack {
-                                Image(uiImage: song.artwork ?? UIImage(systemName: "music.note")!)
-                                    .resizable()
-                                    .scaledToFit()
-                                    .frame(width: 50, height: 50)
-                                    .cornerRadius(4)
-                                VStack(alignment: .leading) {
-                                    Text(song.title)
-                                        .font(.headline)
-                                    Text(song.artist)
-                                        .font(.subheadline)
-                                        .foregroundColor(.secondary)
-                                }
-                            }
-                        }
-                    }
-                }
-                .navigationTitle("Library")
-                .onAppear(perform: loadSongs)
-                .fileImporter(
-                    isPresented: $showImporter,
-                    allowedContentTypes: [.mp3, .mpeg4Audio],
-                    allowsMultipleSelection: true
-                ) { result in
-                    handleImport(result: result)
-                }
+                AlbumsView(
+                    manager: albumsManager,
+                    songs: songs,
+                    playAction: play(_:),
+                    selected: $selectedSong
+                )
             }
-            .tabItem {
-                Label("Library", systemImage: "music.note.list")
-            }
+            .tabItem { Label("Albums", systemImage: "rectangle.stack") }
 
-            NowPlayingView(audioManager: audioManager, song: selectedSong)
-                .tabItem {
-                    Label("Now Playing", systemImage: "play.circle")
-                }
+            // Playlists
+            NavigationView {
+                PlaylistsView(
+                    manager: playlistsManager,
+                    songs: songs,
+                    playAction: play(_:),
+                    selected: $selectedSong
+                )
+            }
+            .tabItem { Label("Playlists", systemImage: "list.bullet.rectangle") }
+
+            // Now Playing
+            NavigationView {
+                NowPlayingView(audioManager: audioManager,
+                               song: selectedSong)
+            }
+            .tabItem { Label("Now Playing", systemImage: "play.circle") }
         }
+        .onAppear(perform: loadSongs)
+        .fileImporter(
+            isPresented: $showImporter,
+            allowedContentTypes: [.mp3, .mpeg4Audio],
+            allowsMultipleSelection: true
+        ) { handleImport($0) }
+    }
+
+    private var songsList: some View {
+        VStack {
+            Button("Import Songs") { showImporter = true }
+                .padding(.top)
+
+            List(songs) { song in
+                SongRow(song: song) { play(song) }
+            }
+        }
+        .navigationTitle("Library")
+    }
+
+    private func play(_ song: Song) {
+        selectedSong = song
+        audioManager.playSong(song)
     }
 
     private func loadSongs() {
-        let allFiles = (try? FileManager.default
-            .contentsOfDirectory(at: documentsURL,
-                                 includingPropertiesForKeys: nil)) ?? []
-        songs = allFiles
-            .filter { ["mp3", "m4a"].contains($0.pathExtension.lowercased()) }
+        let urls = (try? FileManager.default.contentsOfDirectory(
+            at: documentsURL,
+            includingPropertiesForKeys: nil)) ?? []
+        songs = urls
+            .filter { ["mp3","m4a"].contains($0.pathExtension.lowercased()) }
             .map(Song.init)
     }
 
-    private func handleImport(result: Result<[URL], Error>) {
+    private func handleImport(_ result: Result<[URL], Error>) {
         showImporter = false
-        switch result {
-        case .success(let urls):
+        if case .success(let urls) = result {
             for url in urls {
                 let dest = documentsURL.appendingPathComponent(url.lastPathComponent)
                 if !FileManager.default.fileExists(atPath: dest.path) {
-                    do {
-                        try FileManager.default.copyItem(at: url, to: dest)
-                    } catch {
-                        print("Copy failed:", error)
-                    }
+                    try? FileManager.default.copyItem(at: url, to: dest)
                 }
             }
             loadSongs()
-        case .failure(let error):
-            print("Import error:", error)
         }
     }
 }
