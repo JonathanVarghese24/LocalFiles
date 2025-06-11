@@ -10,29 +10,19 @@ import AVFoundation
 import MediaPlayer
 
 class AudioPlayerManager: ObservableObject {
-    // MARK: - Published state
-    @Published var isPlaying = false
-    @Published var currentTime: TimeInterval = 0
-    @Published var duration: TimeInterval = 0
+    @Published var isPlaying   = false
+    @Published var currentTime = TimeInterval(0)
+    @Published var duration    = TimeInterval(0)
 
-    // MARK: - Private properties
     private var player: AVAudioPlayer?
     private var timer: Timer?
     private var currentSong: Song?
 
-    // MARK: - Initialization
-    init() {
-        configureAudioSession()
-        setupRemoteTransportControls()
-    }
+    init() { setupRemoteTransportControls() }
 
-    // MARK: - Public API
-
-    /// Play a new song, resetting any existing playback.
     func playSong(_ song: Song) {
         stop()
         currentSong = song
-
         do {
             player = try AVAudioPlayer(contentsOf: song.url)
             player?.prepareToPlay()
@@ -46,7 +36,6 @@ class AudioPlayerManager: ObservableObject {
         }
     }
 
-    /// Resume playback if paused.
     func play() {
         guard player != nil else { return }
         player?.play()
@@ -55,7 +44,6 @@ class AudioPlayerManager: ObservableObject {
         updateNowPlayingInfo()
     }
 
-    /// Pause playback.
     func pause() {
         player?.pause()
         isPlaying = false
@@ -63,88 +51,56 @@ class AudioPlayerManager: ObservableObject {
         updateNowPlayingInfo()
     }
 
-    /// Stop playback entirely.
     func stop() {
         player?.stop()
         isPlaying = false
         stopTimer()
     }
 
-    /// Jump to a specific time in the current track.
     func seek(to time: TimeInterval) {
         player?.currentTime = time
         currentTime = time
         updateNowPlayingInfo()
     }
 
-    // MARK: - Audio Session Configuration
-
-    private func configureAudioSession() {
-        let session = AVAudioSession.sharedInstance()
-        do {
-            // .playback category allows audio when screen is locked or app is backgrounded
-            try session.setCategory(.playback, mode: .default)
-            try session.setActive(true)
-        } catch {
-            print("⚠️ Audio session configuration failed:", error)
+    private func startTimer() {
+        stopTimer()
+        timer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
+            guard let s = self, let p = s.player else { return }
+            s.currentTime = p.currentTime
+            s.updateNowPlayingInfo()
         }
     }
+    private func stopTimer() {
+        timer?.invalidate()
+        timer = nil
+    }
 
-    // MARK: - Now Playing / Remote Controls
+    // MARK: – Remote & Lock-Screen Controls
 
     private func setupRemoteTransportControls() {
-        let commandCenter = MPRemoteCommandCenter.shared()
-
-        commandCenter.playCommand.addTarget { [unowned self] _ in
-            self.play()
-            return .success
-        }
-
-        commandCenter.pauseCommand.addTarget { [unowned self] _ in
-            self.pause()
-            return .success
-        }
-
-        commandCenter.changePlaybackPositionCommand.addTarget { [unowned self] event in
-            guard let positionEvent = event as? MPChangePlaybackPositionCommandEvent else {
-                return .commandFailed
-            }
-            self.seek(to: positionEvent.positionTime)
-            return .success
+        let cc = MPRemoteCommandCenter.shared()
+        cc.playCommand.addTarget { [unowned self] _ in self.play(); return .success }
+        cc.pauseCommand.addTarget { [unowned self] _ in self.pause(); return .success }
+        cc.changePlaybackPositionCommand.addTarget { [unowned self] event in
+            guard let e = event as? MPChangePlaybackPositionCommandEvent else { return .commandFailed }
+            self.seek(to: e.positionTime); return .success
         }
     }
 
     private func updateNowPlayingInfo() {
         guard let song = currentSong else { return }
-
         var info: [String: Any] = [
-            MPMediaItemPropertyTitle: song.title,
-            MPMediaItemPropertyArtist: song.artist,
+            MPMediaItemPropertyTitle:               song.title,
+            MPMediaItemPropertyArtist:              song.artist,
             MPNowPlayingInfoPropertyElapsedPlaybackTime: currentTime,
-            MPMediaItemPropertyPlaybackDuration: duration
+            MPMediaItemPropertyPlaybackDuration:    duration
         ]
-
-        if let artwork = song.artwork {
-            info[MPMediaItemPropertyArtwork] =
-                MPMediaItemArtwork(boundsSize: artwork.size) { _ in artwork }
+        if let art = song.artwork {
+            info[MPMediaItemPropertyArtwork] = MPMediaItemArtwork(
+                boundsSize: art.size
+            ) { _ in art }
         }
-
         MPNowPlayingInfoCenter.default().nowPlayingInfo = info
-    }
-
-    // MARK: - Timer for progress updates
-
-    private func startTimer() {
-        stopTimer()
-        timer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
-            guard let self = self, let player = self.player else { return }
-            self.currentTime = player.currentTime
-            self.updateNowPlayingInfo()
-        }
-    }
-
-    private func stopTimer() {
-        timer?.invalidate()
-        timer = nil
     }
 }
