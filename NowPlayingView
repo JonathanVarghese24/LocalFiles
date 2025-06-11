@@ -43,7 +43,7 @@ struct NowPlayingView: View {
 
                 HStack {
                     Spacer()
-                    Button { /* prev track */ } label: {
+                    Button { /* prev */ } label: {
                         Image(systemName: "backward.fill")
                             .font(.largeTitle)
                     }
@@ -54,13 +54,13 @@ struct NowPlayingView: View {
                             : audioManager.play()
                     } label: {
                         Image(systemName:
-                                audioManager.isPlaying
-                                ? "pause.circle.fill"
-                                : "play.circle.fill")
+                              audioManager.isPlaying
+                              ? "pause.circle.fill"
+                              : "play.circle.fill")
                             .font(.system(size: 60))
                     }
                     Spacer()
-                    Button { /* next track */ } label: {
+                    Button { /* next */ } label: {
                         Image(systemName: "forward.fill")
                             .font(.largeTitle)
                     }
@@ -74,5 +74,6 @@ struct NowPlayingView: View {
                     .foregroundColor(.secondary)
             }
         }
+        .navigationTitle("Now Playing")
     }
 }
